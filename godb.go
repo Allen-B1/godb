@@ -79,11 +79,11 @@ func (r Ref) Remove() Transaction {
 	return transactionRemove{Ref: r}
 }
 
-func (r Ref) Ref(key string) *Ref {
+func (r Ref) Ref(key string) Ref {
 	keys := []string(nil)
 	keys = append(keys, r.keys...)
 	keys = append(keys, key)
-	return &Ref{doc: r.doc, keys: keys}
+	return Ref{doc: r.doc, keys: keys}
 }
 
 var (
