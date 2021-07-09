@@ -79,6 +79,10 @@ func (r Ref) Remove() Transaction {
 	return transactionRemove{Ref: r}
 }
 
+func (r Ref) Update(f func(interface{}) interface{}) Transaction {
+	return transactionUpdate{Ref: r, f: f}
+}
+
 func (r Ref) Ref(key string) Ref {
 	keys := []string(nil)
 	keys = append(keys, r.keys...)
@@ -146,9 +150,9 @@ func (t *transactionSet) Apply(root map[string]interface{}) error {
 	return nil
 }
 
-type transactionUpdate []Transaction
+type transactionCombine []Transaction
 
-func (t transactionUpdate) Apply(root map[string]interface{}) error {
+func (t transactionCombine) Apply(root map[string]interface{}) error {
 	for _, tr := range t {
 		err := tr.Apply(root)
 		if err != nil {
@@ -158,11 +162,11 @@ func (t transactionUpdate) Apply(root map[string]interface{}) error {
 	return nil
 }
 
-func (t transactionUpdate) Doc() *Doc {
+func (t transactionCombine) Doc() *Doc {
 	return t[0].Doc()
 }
 
-func tryUpdate(transactions ...Transaction) (Transaction, error) {
+func tryAll(transactions ...Transaction) (Transaction, error) {
 	if len(transactions) == 0 {
 		return nil, fmt.Errorf("no transactions specified in db.Update")
 	}
@@ -174,11 +178,11 @@ func tryUpdate(transactions ...Transaction) (Transaction, error) {
 		}
 	}
 
-	return transactionUpdate(transactions), nil
+	return transactionCombine(transactions), nil
 }
 
-func Update(transactions ...Transaction) Transaction {
-	t, err := tryUpdate(transactions...)
+func All(transactions ...Transaction) Transaction {
+	t, err := tryAll(transactions...)
 	if err != nil {
 		panic(err)
 	}
@@ -203,6 +207,28 @@ func (t transactionRemove) Apply(root map[string]interface{}) error {
 }
 
 func (t transactionRemove) Doc() *Doc {
+	return t.doc
+}
+
+type transactionUpdate struct {
+	Ref
+	f func(interface{}) interface{}
+}
+
+func (t transactionUpdate) Apply(root map[string]interface{}) error {
+	n, err := getChild(root, t.keys[:len(t.keys)-1], true)
+	if err != nil {
+		return err
+	}
+	m, ok := n.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("access of '%s': value at '%s' is not a json object", strings.Join(t.keys, "."), strings.Join(t.keys[:len(t.keys)-1], "."))
+	}
+	m[t.keys[len(t.keys)-1]] = t.f(m[t.keys[len(t.keys)-1]])
+	return nil
+}
+
+func (t transactionUpdate) Doc() *Doc {
 	return t.doc
 }
 
